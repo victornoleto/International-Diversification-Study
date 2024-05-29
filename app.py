@@ -1,7 +1,8 @@
 import requests
 import json
-import time
 import os
+import numpy as np
+from scipy.optimize import curve_fit
 
 def get_data(min_year, vxus_allocation):
 
@@ -65,36 +66,65 @@ def get_data(min_year, vxus_allocation):
 	with open(cache_filename, 'w') as f:
 		json.dump(result, f, indent=4)
 	
-	#time.sleep(1)
 	return result
 
-start_min_year = 1980
+def create_result_file():
 
-while True:
+	# Função para representar uma parábola
+	def parabola(x, a, b, c):
+		return a * x**2 + b * x + c
 
-	try:
+	def get_info(data):
 
-		for min_year in range(start_min_year, 2021):
+		x = np.array([])
+		y = np.array([])
 
-			data = []
+		for row in data:
+			x = np.append(x, row['std'])
+			y = np.append(y, row['cagr'])
 
-			for i in range(0, 101):
+		# Ajuste da parábola aos dados
+		params, _ = curve_fit(parabola, x, y)
 
-				result = get_data(min_year, i)
+		# Coeficientes da parábola
+		a, b, c = params
 
-				print(min_year, i, result['cagr'], result['std'])
+		# Cálculo do vértice
+		h = -b / (2 * a)
+		k = a * h**2 + b * h + c
 
-				data.append(result)
+		# Find index of the closest point to the vertex
+		index = int(np.argmin(np.abs(x - h)))
 
-			with open(f"data/{min_year}.json", 'w') as f:
-				json.dump(data, f, indent=4)
+		return h, k, index
 
-			start_min_year = min_year + 1
-	
-	except Exception as e:
-		print('Deu erro!', start_min_year, e)
-		time.sleep(30)
-		continue
-	
+	files = os.listdir('data')
 
+	# Sort files by name
+	files = sorted(files)
+
+	result = []
+
+	for file in files:
+
+		data = json.load(open('data/' + file))
+
+		year = int(file.split('.')[0])
+
+		std, cagr, index = get_info(data)
+
+		row = {
+			'year': year,
+			'optimized_ex_us_allocation': index,
+			'optimized_row': data[index],
+			'entire_us_row': data[0],
+			'entire_ex_us_row': data[-1],
+		}
+
+		result.append(row)
+
+	with open('result.json', 'w') as f:
+		json.dump(result, f, indent=4)
+
+create_result_file()
 
